@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" data-portal="none" data-gd-id="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Gravibloc</title>
+<meta name="description" content="Tilt the board, slide the blocks, pop matching colours. A bite-size puzzle with endless levels.">
+<meta name="theme-color" content="#1b1c33">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b1c33'/%3E%3Crect x='10' y='10' width='20' height='20' rx='6' fill='%23ff5d73'/%3E%3Crect x='34' y='34' width='20' height='20' rx='6' fill='%234ea8ff'/%3E%3Crect x='34' y='10' width='20' height='20' rx='6' fill='%23ffb627'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #1b1c33;
+    --bg2: #2a2c52;
+    --panel: #26284a;
+    --ink: #f4f4ff;
+    --muted: #a9abd6;
+    --accent: #ffb627;
+    --good: #3ecf8e;
+    --bad: #ff5d73;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: none; }
+  body { background: radial-gradient(120% 90% at 50% 0%, var(--bg2) 0%, var(--bg) 70%); }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)); }
+  #hud, #bar { display: flex; gap: 8px; align-items: center; justify-content: space-between;
+    max-width: 560px; width: 100%; margin: 0 auto; }
+  .pill { background: var(--panel); border-radius: 999px; padding: 8px 14px; font-weight: 800;
+    font-size: 16px; color: var(--ink); border: 0; display: inline-flex; align-items: center; gap: 6px;
+    box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+  .moves { flex-direction: column; gap: 0; padding: 4px 18px; line-height: 1; }
+  .moves span { font-size: 24px; }
+  .moves small { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  .moves.low span { color: var(--bad); }
+  button { font: inherit; cursor: pointer; }
+  .coins { cursor: pointer; }
+  .coin { width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.25); display: inline-block; }
+  #stage { flex: 1; position: relative; min-height: 0; }
+  #board { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #bar button { flex: 1; background: var(--panel); color: var(--ink); border: 0; border-radius: 16px;
+    padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-weight: 700; font-size: 12px; box-shadow: 0 3px 0 rgba(0,0,0,.25); position: relative; }
+  #bar button:active, .btn:active, .pill:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+  #bar svg { width: 24px; height: 24px; }
+  #bar .tag { position: absolute; top: -6px; right: 8px; background: var(--accent); color: #2b1d00;
+    font-size: 10px; border-radius: 999px; padding: 1px 6px; }
+  #overlay { position: fixed; inset: 0; background: rgba(10,10,25,.62); display: flex;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10; backdrop-filter: blur(3px); }
+  #overlay.hidden { display: none; }
+  .card { background: var(--panel); border-radius: 24px; padding: 24px 20px; width: 100%; max-width: 360px;
+    text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.4); animation: pop .22s ease-out; }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .card h1 { margin: 0 0 6px; font-size: 34px; letter-spacing: -.01em; }
+  .card h2 { margin: 0 0 8px; font-size: 26px; }
+  .card p { margin: 6px 0 14px; color: var(--muted); line-height: 1.4; }
+  .btns { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .btn { border: 0; border-radius: 16px; padding: 14px; font-weight: 800; font-size: 17px; color: #1b1c33;
+    background: var(--accent); box-shadow: 0 4px 0 rgba(0,0,0,.25); display: flex; align-items: center;
+    justify-content: center; gap: 8px; }
+  .btn .coin { background: #7a4d00; }
+  .btn.alt .coin, .btn.green .coin { background: var(--accent); }
+  .btn.alt { background: #3a3d6e; color: var(--ink); }
+  .btn.green { background: var(--good); }
+  .btn[disabled] { opacity: .45; pointer-events: none; }
+  .demo { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; }
+  .demo i { width: 26px; height: 26px; border-radius: 8px; display: block; }
+  .shop { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .theme { background: #1f2142; border-radius: 16px; padding: 10px; display: flex; flex-direction: column;
+    gap: 8px; align-items: center; }
+  .theme .sw { display: flex; gap: 3px; }
+  .theme .sw i { width: 16px; height: 16px; border-radius: 5px; display: block; }
+  .theme b { font-size: 14px; }
+  .theme .btn { padding: 8px 10px; font-size: 14px; width: 100%; }
+  #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px);
+    background: #0e0f22; color: var(--ink); padding: 10px 16px; border-radius: 999px; font-weight: 700;
+    opacity: 0; transition: .25s; pointer-events: none; z-index: 20; max-width: calc(100% - 32px);
+    text-align: center; font-size: 14px; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .stars { font-size: 30px; letter-spacing: 4px; color: var(--accent); margin: 2px 0 6px; }
+  .stars .off { color: #44477a; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="pill" id="lvl">Level 1</div>
+    <div class="pill moves" id="movesBox"><span id="moves">0</span><small>moves</small></div>
+    <button class="pill coins" id="btnShop" aria-label="Shop"><i class="coin"></i><span id="coins">0</span></button>
+  </header>
+  <main id="stage"><canvas id="board" aria-label="Game board"></canvas></main>
+  <footer id="bar">
+    <button id="btnUndo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Undo</button>
+    <button id="btnRestart" aria-label="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Restart</button>
+    <button id="btnHint" aria-label="Hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>Hint<span class="tag" id="hintTag">10</span></button>
+    <button id="btnMute" aria-label="Sound"><svg id="icoSound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>Sound</button>
+  </footer>
+  <div id="overlay" class="hidden"><div class="card" id="card"></div></div>
+  <div id="toast"></div>
+</div>
+<script src="ads.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
