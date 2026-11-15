@@ -43,7 +43,8 @@
     gameplayStart: function () {},
     gameplayStop: function () {},
     midgame: function () { return Promise.resolve(); },
-    rewarded: function () { return Promise.resolve(false); }
+    rewarded: function () { return Promise.resolve(false); },
+    privacyOptions: null // set when the player must be able to reopen the consent form
   };
   var noop = Object.assign({}, Ads);
   delete noop.onPause; delete noop.onResume; delete noop.portal; // keep the game's hooks
@@ -150,13 +151,104 @@
     };
   }
 
-  var impls = { crazygames: crazygames, poki: poki, gamedistribution: gamedistribution };
+  // --- Google AdMob (Android app via Capacitor) ------------------------------
+  // Ad unit ids come from <html data-admob-interstitial / data-admob-rewarded>.
+  // Without them, Google's public test units are used (they never pay out).
+  function admob() {
+    var TEST_INTERSTITIAL = 'ca-app-pub-3940256099942544/1033173712';
+    var TEST_REWARDED = 'ca-app-pub-3940256099942544/5224354917';
+    var interstitialId = root.dataset.admobInterstitial || TEST_INTERSTITIAL;
+    var rewardedId = root.dataset.admobRewarded || TEST_REWARDED;
+    var testing = interstitialId === TEST_INTERSTITIAL;
+    var A = function () { return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob; };
+    var npa = false;
+    var interstitialReady = false, rewardedReady = false;
+
+    function prepInterstitial() {
+      interstitialReady = false;
+      return A().prepareInterstitial({ adId: interstitialId, isTesting: testing, npa: npa })
+        .then(function () { interstitialReady = true; }, function () {});
+    }
+    function prepRewarded() {
+      rewardedReady = false;
+      return A().prepareRewardVideoAd({ adId: rewardedId, isTesting: testing, npa: npa })
+        .then(function () { rewardedReady = true; }, function () {});
+    }
+    // Listen for plugin events until one handler returns 'resolve'.
+    // Returns { ready, done }: wait for ready before showing the ad so no event is missed.
+    function listen(events) {
+      var handles = [], finish;
+      var done = new Promise(function (res) { finish = res; });
+      var ready = Promise.all(Object.keys(events).map(function (name) {
+        return A().addListener(name, function (data) {
+          if (events[name](data) === 'resolve') finish();
+        }).then(function (h) { handles.push(h); }, function () {});
+      }));
+      done.then(function () { handles.forEach(function (h) { h && h.remove && h.remove(); }); });
+      return { ready: ready, done: done, finish: function () { finish(); } };
+    }
+
+    return {
+      hasRewarded: true,
+      initTimeout: 120000, // the consent form waits for the player
+      init: function () {
+        if (!A()) return Promise.reject(new Error('AdMob plugin missing'));
+        return A().initialize({ initializeForTesting: testing })
+          .then(function () { return A().requestConsentInfo(); })
+          .then(function (info) {
+            if (info && info.isConsentFormAvailable && info.status === 'REQUIRED') return A().showConsentForm();
+            return info;
+          })
+          .then(function () { return A().requestConsentInfo(); })
+          .then(function (info) {
+            if (info && info.canRequestAds === false) npa = true;
+            // EU/UK players must be able to change their ad-privacy choice later.
+            if (info && info.privacyOptionsRequirementStatus === 'REQUIRED') {
+              Ads.privacyOptions = function () { return A().showPrivacyOptionsForm().catch(function () {}); };
+            }
+          }, function () {})
+          .then(function () { prepInterstitial(); prepRewarded(); });
+      },
+      midgame: function () {
+        if (!interstitialReady) { prepInterstitial(); return Promise.resolve(); }
+        pause();
+        var l = listen({
+          interstitialAdDismissed: function () { return 'resolve'; },
+          interstitialAdFailedToShow: function () { return 'resolve'; }
+        });
+        return l.ready
+          .then(function () { return A().showInterstitial().then(function () { return l.done; }); })
+          .catch(function () {})
+          .then(function () { resume(); prepInterstitial(); });
+      },
+      rewarded: function () {
+        if (!rewardedReady) { prepRewarded(); return Promise.resolve(false); }
+        var earned = false;
+        pause();
+        var l = listen({
+          onRewardedVideoAdReward: function () { earned = true; },
+          onRewardedVideoAdDismissed: function () { return 'resolve'; },
+          onRewardedVideoAdFailedToShow: function () { return 'resolve'; }
+        });
+        // showRewardVideoAd only settles when a reward is earned, so wait for the ad to close instead.
+        return l.ready
+          .then(function () {
+            A().showRewardVideoAd().then(function () { earned = true; }, function () { l.finish(); });
+            return l.done;
+          })
+          .catch(function () {})
+          .then(function () { resume(); prepRewarded(); return earned; });
+      }
+    };
+  }
+
+  var impls = { crazygames: crazygames, poki: poki, gamedistribution: gamedistribution, admob: admob };
   if (impls[PORTAL]) {
     var impl = impls[PORTAL]();
     var realInit = impl.init;
     Object.assign(Ads, impl);
     Ads.init = function () {
-      return withTimeout(realInit(), 8000).catch(function () {
+      return withTimeout(realInit(), impl.initTimeout || 8000).catch(function () {
         // SDK blocked or unavailable: carry on without ads.
         Object.assign(Ads, noop, { portal: PORTAL + ' (offline)' });
       });

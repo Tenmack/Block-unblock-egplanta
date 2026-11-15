@@ -431,6 +431,7 @@
       [
         { label: lvl > 1 ? `Continue · Level ${lvl}` : 'Play', cls: 'green', onClick: () => { startLevel(lvl); Ads.gameplayStart(); } },
         { label: '<i class="coin"></i> Shop', cls: 'alt', onClick: openShop },
+        ...(Ads.privacyOptions ? [{ label: 'Privacy choices', cls: 'alt', onClick: () => Ads.privacyOptions() }] : []),
         ...(lvl > 1 ? [{ label: 'Start from level 1', cls: 'alt', onClick: () => { startLevel(1); Ads.gameplayStart(); } }] : []),
       ]);
   }

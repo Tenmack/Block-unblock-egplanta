@@ -1,0 +1,18 @@
+{
+  "name": "gravibloc-android",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Google Play build of Gravibloc (Capacitor wrapper around the HTML5 game)",
+  "scripts": {
+    "web": "rm -rf www && mkdir www && cp ../game.js ../ads.js www/ && sed -e 's/data-portal=\"none\"/data-portal=\"admob\"/' ../index.html > www/index.html",
+    "sync": "npm run web && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^8.3.0",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}
